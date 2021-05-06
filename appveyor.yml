@@ -1,8 +1,10 @@
+
 clone_depth: 1
 
 branches:
   only:
     - master
+
 
 environment:
   LLVM_VERSION: 9.0.1
