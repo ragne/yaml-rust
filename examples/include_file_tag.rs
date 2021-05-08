@@ -42,6 +42,10 @@ impl<'a> yaml::YamlScalarParser for IncludeParser<'a> {
         }
         None
     }
+
+    fn parse_sequence(&self, _tag: &scanner::TokenType, _seq: &(yaml::Yaml, usize)) -> Option<yaml::Yaml> {
+        None
+    }
 }
 
 fn main() {

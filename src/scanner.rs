@@ -2,12 +2,12 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::{char, fmt};
 
-#[derive(Clone, Copy, PartialEq, Debug, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq, Hash)]
 pub enum TEncoding {
     Utf8,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq, Hash)]
 pub enum TScalarStyle {
     Any,
     Plain,
@@ -85,7 +85,7 @@ impl fmt::Display for ScanError {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Eq)]
+#[derive(Clone, PartialEq, Debug, Eq, Hash)]
 pub enum TokenType {
     NoToken,
     StreamStart(TEncoding),

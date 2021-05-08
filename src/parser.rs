@@ -43,11 +43,11 @@ pub enum Event {
     Alias(usize),
     /// Value, style, anchor_id, tag
     Scalar(String, TScalarStyle, usize, Option<TokenType>),
-    /// Anchor ID
-    SequenceStart(usize),
+    /// Anchor ID, TokenType
+    SequenceStart(usize, Option<TokenType>),
     SequenceEnd,
-    /// Anchor ID
-    MappingStart(usize),
+    /// Anchor ID, TokenType
+    MappingStart(usize, Option<TokenType>),
     MappingEnd,
 }
 
@@ -235,11 +235,11 @@ impl<T: Iterator<Item = char>> Parser<T> {
                 recv.on_event(first_ev, mark);
                 Ok(())
             }
-            Event::SequenceStart(_) => {
+            Event::SequenceStart(_, _) => {
                 recv.on_event(first_ev, mark);
                 self.load_sequence(recv)
             }
-            Event::MappingStart(_) => {
+            Event::MappingStart(_, _) => {
                 recv.on_event(first_ev, mark);
                 self.load_mapping(recv)
             }
@@ -272,6 +272,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
     fn load_sequence<R: MarkedEventReceiver>(&mut self, recv: &mut R) -> Result<(), ScanError> {
         let (mut ev, mut mark) = self.next()?;
         while ev != Event::SequenceEnd {
+            //dbg!(&ev, mark);
             self.load_node(ev, mark, recv)?;
 
             // next event
@@ -516,7 +517,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
         match *self.peek_token()? {
             Token(mark, TokenType::BlockEntry) if indentless_sequence => {
                 self.state = State::IndentlessSequenceEntry;
-                Ok((Event::SequenceStart(anchor_id), mark))
+                Ok((Event::SequenceStart(anchor_id, tag), mark))
             }
             Token(_, TokenType::Scalar(..)) => {
                 self.pop_state();
@@ -545,19 +546,19 @@ impl<T: Iterator<Item = char>> Parser<T> {
             }
             Token(mark, TokenType::FlowSequenceStart) => {
                 self.state = State::FlowSequenceFirstEntry;
-                Ok((Event::SequenceStart(anchor_id), mark))
+                Ok((Event::SequenceStart(anchor_id, tag), mark))
             }
             Token(mark, TokenType::FlowMappingStart) => {
                 self.state = State::FlowMappingFirstKey;
-                Ok((Event::MappingStart(anchor_id), mark))
+                Ok((Event::MappingStart(anchor_id, tag), mark))
             }
             Token(mark, TokenType::BlockSequenceStart) if block => {
                 self.state = State::BlockSequenceFirstEntry;
-                Ok((Event::SequenceStart(anchor_id), mark))
+                Ok((Event::SequenceStart(anchor_id, tag), mark))
             }
             Token(mark, TokenType::BlockMappingStart) if block => {
                 self.state = State::BlockMappingFirstKey;
-                Ok((Event::MappingStart(anchor_id), mark))
+                Ok((Event::MappingStart(anchor_id, tag), mark))
             }
             // ex 7.2, an empty scalar can follow a secondary tag
             Token(mark, _) if tag.is_some() || anchor_id > 0 => {
@@ -754,7 +755,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
             Token(mark, TokenType::Key) => {
                 self.state = State::FlowSequenceEntryMappingKey;
                 self.skip();
-                Ok((Event::MappingStart(0), mark))
+                Ok((Event::MappingStart(0, None), mark))
             }
             _ => {
                 self.push_state(State::FlowSequenceEntry);

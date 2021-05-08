@@ -86,10 +86,15 @@ fn parse_f64(v: &str) -> Option<f64> {
 ///        }
 ///        None
 ///    }
+///    fn parse_sequence(&self, _tag: &scanner::TokenType, _seq: &(yaml::Yaml, usize)) -> Option<yaml::Yaml> {
+///        None
+///    }
 ///}
 /// ```
 pub trait YamlScalarParser {
     fn parse_scalar(&self, tag: &TokenType, value: &str) -> Option<Yaml>;
+
+    fn parse_sequence(&self, tag: &TokenType, seq: &(Yaml, usize)) -> Option<Yaml>;
 }
 
 #[derive(Default)]
@@ -99,6 +104,7 @@ pub struct YamlLoader<'a> {
     // (current node, anchor_id) tuple
     doc_stack: Vec<(Yaml, usize)>,
     key_stack: Vec<Yaml>,
+    encountered_tags: Vec<(usize, TokenType)>,
     anchor_map: BTreeMap<usize, Yaml>,
     scalar_parser: Vec<&'a dyn YamlScalarParser>,
 }
@@ -106,6 +112,7 @@ pub struct YamlLoader<'a> {
 impl<'a> MarkedEventReceiver for YamlLoader<'a> {
     fn on_event(&mut self, ev: Event, _: Marker) {
         // println!("EV {:?}", ev);
+        //dbg!(&ev);
         match ev {
             Event::DocumentStart => {
                 // do nothing
@@ -118,20 +125,28 @@ impl<'a> MarkedEventReceiver for YamlLoader<'a> {
                     _ => unreachable!(),
                 }
             }
-            Event::SequenceStart(aid) => {
-                self.doc_stack.push((Yaml::Array(Vec::new()), aid));
+            Event::SequenceStart(aid, tag) => {
+                self.doc_stack.push((Yaml::Array(vec![]), aid));
+                self.push_tag(aid, tag)
             }
             Event::SequenceEnd => {
                 let node = self.doc_stack.pop().unwrap();
+                
+                if self.pop_tag(&node) {
+                    return;
+                }
+                
                 self.insert_new_node(node);
             }
-            Event::MappingStart(aid) => {
+            Event::MappingStart(aid, tag) => {
                 self.doc_stack.push((Yaml::Hash(Hash::new()), aid));
+                self.push_tag(aid, tag);
                 self.key_stack.push(Yaml::BadValue);
             }
             Event::MappingEnd => {
                 self.key_stack.pop().unwrap();
                 let node = self.doc_stack.pop().unwrap();
+                self.pop_tag(&node);
                 self.insert_new_node(node);
             }
             Event::Scalar(v, style, aid, tag) => {
@@ -238,9 +253,32 @@ impl<'a> YamlLoader<'a> {
             docs: Vec::new(),
             doc_stack: Vec::new(),
             key_stack: Vec::new(),
+            encountered_tags: Vec::new(),
             anchor_map: BTreeMap::new(),
             scalar_parser: Vec::new(),
         }
+    }
+
+    fn push_tag(&mut self, aid: usize, tag: Option<TokenType>) {
+        if let Some(t) = tag {
+            self.encountered_tags.push((aid,t));
+        } else {
+            self.encountered_tags.pop();
+        }
+    }
+
+    fn pop_tag(&mut self, node: &(Yaml, usize)) -> bool {
+        if let Some((aid, t)) = self.encountered_tags.pop() {
+            let mut yaml = None;
+            for parser in &self.scalar_parser {
+                yaml = parser.parse_sequence(&t, &node);
+            }
+            if let Some(yaml) = yaml {
+                self.insert_new_node((yaml, aid));
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn parse_from_str(mut self, source: &str) -> Result<Vec<Yaml>, ScanError> {
@@ -798,6 +836,10 @@ subcommands3:
                     return Some(Yaml::String("Hello ".to_string() + value));
                 }
             }
+            None
+        }
+
+        fn parse_sequence(&self, _tag: &TokenType, _seq: &(Yaml, usize)) -> Option<Yaml> {
             None
         }
     }
