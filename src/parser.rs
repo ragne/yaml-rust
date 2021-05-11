@@ -393,11 +393,8 @@ impl<T: Iterator<Item = char>> Parser<T> {
                 _ => break,
             };
 
-            match action {
-                DirectiveAction::Tag { handle, prefix } => {
-                    self.tag_directives.insert(handle, prefix);
-                }
-                _ => (),
+            if let DirectiveAction::Tag { handle, prefix } = action {
+                self.tag_directives.insert(handle, prefix);
             }
 
             self.skip();
@@ -452,7 +449,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
         Ok((Event::DocumentEnd, marker))
     }
 
-    fn register_anchor(&mut self, name: String, _: &Marker) -> Result<usize, ScanError> {
+    fn register_anchor(&mut self, name: String, _: &Marker) -> usize {
         // anchors can be overridden/reused
         // if self.anchors.contains_key(name) {
         //     return Err(ScanError::new(*mark,
@@ -461,7 +458,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
         let new_id = self.anchor_id;
         self.anchor_id += 1;
         self.anchors.insert(name, new_id);
-        Ok(new_id)
+        new_id
     }
 
     fn parse_node(&mut self, block: bool, indentless_sequence: bool) -> ParseResult {
@@ -486,7 +483,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
             }
             Token(_, TokenType::Anchor(_)) => {
                 if let Token(mark, TokenType::Anchor(name)) = self.fetch_token() {
-                    anchor_id = self.register_anchor(name, &mark)?;
+                    anchor_id = self.register_anchor(name, &mark);
                     if let TokenType::Tag(..) = self.peek_token()?.1 {
                         if let tg @ TokenType::Tag(..) = self.fetch_token().1 {
                             tag = Some(tg);
@@ -503,7 +500,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
                     tag = Some(tg);
                     if let TokenType::Anchor(_) = self.peek_token()?.1 {
                         if let Token(mark, TokenType::Anchor(name)) = self.fetch_token() {
-                            anchor_id = self.register_anchor(name, &mark)?;
+                            anchor_id = self.register_anchor(name, &mark);
                         } else {
                             unreachable!()
                         }
@@ -860,6 +857,7 @@ impl<T: Iterator<Item = char>> Parser<T> {
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn flow_sequence_entry_mapping_end(&mut self) -> ParseResult {
         self.state = State::FlowSequenceEntry;
         Ok((Event::MappingEnd, self.scanner.mark()))
