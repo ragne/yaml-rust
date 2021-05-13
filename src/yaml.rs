@@ -132,11 +132,9 @@ impl<'a> MarkedEventReceiver for YamlLoader<'a> {
             Event::SequenceEnd => {
                 let node = self.doc_stack.pop().unwrap();
                 
-                if self.pop_tag(&node) {
-                    return;
+                if !self.pop_tag(&node) {
+                    self.insert_new_node(node);
                 }
-                
-                self.insert_new_node(node);
             }
             Event::MappingStart(aid, tag) => {
                 self.doc_stack.push((Yaml::Hash(Hash::new()), aid));
@@ -146,8 +144,9 @@ impl<'a> MarkedEventReceiver for YamlLoader<'a> {
             Event::MappingEnd => {
                 self.key_stack.pop().unwrap();
                 let node = self.doc_stack.pop().unwrap();
-                self.pop_tag(&node);
-                self.insert_new_node(node);
+                if !self.pop_tag(&node) {
+                    self.insert_new_node(node);
+                }
             }
             Event::Scalar(v, style, aid, tag) => {
                 if let Some(ref tag) = tag {
