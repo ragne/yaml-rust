@@ -92,9 +92,9 @@ fn parse_f64(v: &str) -> Option<f64> {
 ///}
 /// ```
 pub trait YamlScalarParser {
-    fn parse_scalar(&self, tag: &TokenType, value: &str) -> Option<Yaml>;
+    fn parse_scalar(&mut self, tag: &TokenType, value: &str, key_stack: &[Yaml]) -> Option<Yaml>;
 
-    fn parse_sequence(&self, tag: &TokenType, seq: &(Yaml, usize)) -> Option<Yaml>;
+    fn parse_sequence(&mut self, tag: &TokenType, seq: &(Yaml, usize), key_stack: &[Yaml]) -> Option<Yaml>;
 }
 
 #[derive(Default)]
@@ -106,13 +106,15 @@ pub struct YamlLoader<'a> {
     key_stack: Vec<Yaml>,
     encountered_tags: Vec<(usize, TokenType)>,
     anchor_map: BTreeMap<usize, Yaml>,
-    scalar_parser: Vec<&'a dyn YamlScalarParser>,
+    scalar_parser: Vec<&'a mut dyn YamlScalarParser>,
+    prev_event: Option<Event>
 }
 
 impl<'a> MarkedEventReceiver for YamlLoader<'a> {
     fn on_event(&mut self, ev: Event, _: Marker) {
         // println!("EV {:?}", ev);
         //dbg!(&ev);
+        let cloned_ev = ev.clone();
         match ev {
             Event::DocumentStart => {
                 // do nothing
@@ -151,8 +153,8 @@ impl<'a> MarkedEventReceiver for YamlLoader<'a> {
             Event::Scalar(v, style, aid, tag) => {
                 if let Some(ref tag) = tag {
                     let mut yaml = None;
-                    for parser in &self.scalar_parser {
-                        yaml = parser.parse_scalar(tag, &v);
+                    for parser in self.scalar_parser.iter_mut() {
+                        yaml = parser.parse_scalar(tag, &v, &self.key_stack);
                     }
                     if let Some(yaml) = yaml {
                         self.insert_new_node((yaml, aid));
@@ -206,6 +208,7 @@ impl<'a> MarkedEventReceiver for YamlLoader<'a> {
             }
             _ => { /* ignore */ }
         }
+        self.prev_event = Some(cloned_ev);
         // println!("DOC {:?}", self.doc_stack);
     }
 }
@@ -239,7 +242,7 @@ impl<'a> YamlLoader<'a> {
         }
     }
 
-    pub fn register_scalar_parser(&mut self, parser: &'a dyn YamlScalarParser) {
+    pub fn register_scalar_parser(&mut self, parser: &'a mut dyn YamlScalarParser) {
         self.scalar_parser.push(parser);
     }
 
@@ -255,6 +258,7 @@ impl<'a> YamlLoader<'a> {
             encountered_tags: Vec::new(),
             anchor_map: BTreeMap::new(),
             scalar_parser: Vec::new(),
+            prev_event: None
         }
     }
 
@@ -269,8 +273,8 @@ impl<'a> YamlLoader<'a> {
     fn pop_tag(&mut self, node: &(Yaml, usize)) -> bool {
         if let Some((aid, t)) = self.encountered_tags.pop() {
             let mut yaml = None;
-            for parser in &self.scalar_parser {
-                yaml = parser.parse_sequence(&t, &node);
+            for parser in self.scalar_parser.iter_mut() {
+                yaml = parser.parse_sequence(&t, &node, &self.key_stack);
             }
             if let Some(yaml) = yaml {
                 self.insert_new_node((yaml, aid));
